@@ -1,6 +1,6 @@
 {
   "name": "cinesubz-api",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "CineSubz Movie Downloader API by Mr Senal",
   "main": "index.js",
   "scripts": {
@@ -15,13 +15,13 @@
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "puppeteer-core": "^24.15.0",
-    "chrome-aws-lambda": "^20.1.0"
+    "puppeteer-core": "^24.4.0",
+    "chrome-aws-lambda": "^19.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": "18.x"
   }
 }
