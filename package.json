@@ -1,6 +1,6 @@
 {
   "name": "cinesubz-api",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "CineSubz Movie Downloader API by Mr Senal",
   "main": "index.js",
   "scripts": {
@@ -22,6 +22,6 @@
     "nodemon": "^3.0.2"
   },
   "engines": {
-    "node": "18.x"
+    "node": "24.x"
   }
 }
