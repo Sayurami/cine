@@ -1,104 +1,102 @@
+// index.js
 const express = require('express');
-const axios = require('axios');
-const cheerio = require('cheerio');
+const puppeteer = require('puppeteer');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
 const BASE_URL = 'https://sinhalasub.lk';
-const headers = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-};
 
-// Root endpoint
+app.use(express.json());
+
+// Root
 app.get('/', (req, res) => {
   res.json({
-    api: "Sinhala Sub Movie API",
-    developer: "Mr Senal",
+    api: 'Sinhala Sub Movie API',
+    developer: 'Mr Senal',
     endpoints: {
-      search: "/search?q={movie_name}",
-      downloadLinks: "/download-links?url={movie_url}"
+      search: '/search?q={movie_name}',
+      details: '/details?url={movie_url}'
     }
   });
 });
 
 // Search endpoint
 app.get('/search', async (req, res) => {
+  const query = req.query.q;
+  if (!query) return res.status(400).json({ error: 'Missing query ?q=' });
+
+  let browser;
   try {
-    const query = req.query.q;
-    if (!query) return res.status(400).json({ error: 'Missing search query ?q=' });
+    browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.goto(`${BASE_URL}/?s=${encodeURIComponent(query)}`, { waitUntil: 'networkidle2' });
 
-    const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
-    const { data } = await axios.get(url, { headers });
-    const $ = cheerio.load(data);
+    const results = await page.evaluate(() => {
+      const items = [];
+      document.querySelectorAll('.ml-item, .item, .post').forEach(el => {
+        const titleEl = el.querySelector('h2, .title, .entry-title');
+        const linkEl = el.querySelector('a');
+        const imgEl = el.querySelector('img');
 
-    const results = [];
-
-    $('article.post').each((i, el) => {
-      const $el = $(el);
-      const title = $el.find('h2.entry-title a').text().trim();
-      const url = $el.find('h2.entry-title a').attr('href');
-      const img = $el.find('img').attr('src');
-      const yearMatch = title.match(/\d{4}/);
-      const year = yearMatch ? yearMatch[0] : '';
-
-      if (title && url) {
-        results.push({ title, url, img, year });
-      }
+        if (titleEl && linkEl) {
+          items.push({
+            title: titleEl.innerText.trim(),
+            url: linkEl.href,
+            image: imgEl ? imgEl.src : null
+          });
+        }
+      });
+      return items;
     });
 
-    res.json({
-      query,
-      count: results.length,
-      results
-    });
+    await browser.close();
+    res.json({ query, count: results.length, results });
   } catch (err) {
+    if (browser) await browser.close();
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Search failed', details: err.message });
   }
 });
 
-// Download links endpoint
-app.get('/download-links', async (req, res) => {
+// Details endpoint (download links)
+app.get('/details', async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).json({ error: 'Missing ?url=' });
+
+  let browser;
   try {
-    const movieUrl = req.query.url;
-    if (!movieUrl) return res.status(400).json({ error: 'Missing movie URL ?url=' });
+    browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2' });
 
-    const { data } = await axios.get(movieUrl, { headers });
-    const $ = cheerio.load(data);
+    const data = await page.evaluate(() => {
+      const title = document.querySelector('h1.entry-title')?.innerText || 'Unknown';
+      const downloadOptions = [];
 
-    const title = $('h1.entry-title').text().trim() || 'Unknown';
-    const downloadOptions = [];
+      document.querySelectorAll('.box_links .sbox').forEach(sbox => {
+        const serverId = sbox.id;
+        const serverTitle = sbox.previousElementSibling?.querySelector('a')?.innerText || serverId;
+        const links = [];
 
-    $('.box_links .sbox').each((i, el) => {
-      const serverId = $(el).attr('id');
-      const serverTitle = $(el).prev('.linktabs').find(`a[href="#${serverId}"]`).text().trim() || serverId;
+        sbox.querySelectorAll('tbody tr').forEach(tr => {
+          const quality = tr.querySelector('.quality')?.innerText || 'Unknown';
+          const size = tr.querySelectorAll('td')[2]?.innerText || 'Unknown';
+          const url = tr.querySelector('a')?.href || null;
+          if (url) links.push({ quality, size, url });
+        });
 
-      const links = [];
-      $(el).find('tbody tr').each((i, row) => {
-        const quality = $(row).find('.quality').text().trim() || 'Unknown';
-        const size = $(row).find('td').eq(2).text().trim() || 'Unknown';
-        const url = $(row).find('a').attr('href');
-        const hostImg = $(row).find('img').attr('src') || '';
-        const hostName = hostImg.split('/').pop().replace('.jpg','').replace('.png','') || 'Unknown';
-
-        if (url) {
-          let directUrl = url;
-          if (hostName.toLowerCase().includes('pixeldrain')) {
-            const id = url.split('/').pop();
-            directUrl = `https://pixeldrain.com/api/file/${id}`;
-          }
-          links.push({ quality, size, url, host: hostName, directUrl });
-        }
+        if (links.length) downloadOptions.push({ server: serverId, serverTitle, links });
       });
 
-      if (links.length) downloadOptions.push({ server: serverId, serverTitle, links });
+      return { title, downloadOptions };
     });
 
-    res.json({ success: true, title, downloadOptions });
+    await browser.close();
+    res.json(data);
   } catch (err) {
+    if (browser) await browser.close();
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch details', details: err.message });
   }
 });
 
