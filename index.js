@@ -4,17 +4,13 @@ const cheerio = require('cheerio');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const BASE_URL = 'https://sinhalasub.lk';
 
+const BASE_URL = 'https://sinhalasub.lk';
 const headers = {
-    'User-Agent': 'Mozilla/5.0',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
-    'Referer': BASE_URL
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 };
 
-app.use(express.json());
-
-// Root info
+// Root endpoint
 app.get('/', (req, res) => {
   res.json({
     api: "Sinhala Sub Movie API",
@@ -26,70 +22,84 @@ app.get('/', (req, res) => {
   });
 });
 
-// Real Search
+// Search endpoint
 app.get('/search', async (req, res) => {
-    try {
-      const q = req.query.q;
-      if (!q) return res.status(400).json({ error: 'Provide ?q=movie name' });
+  try {
+    const query = req.query.q;
+    if (!query) return res.status(400).json({ error: 'Missing search query ?q=' });
 
-      const searchUrl = `${BASE_URL}/?s=${encodeURIComponent(q)}`;
-      const { data } = await axios.get(searchUrl, { headers });
-      const $ = cheerio.load(data);
+    const url = `${BASE_URL}/?s=${encodeURIComponent(query)}`;
+    const { data } = await axios.get(url, { headers });
+    const $ = cheerio.load(data);
 
-      const results = [];
-      $('article.post').each((i, el) => {
-        const title = $(el).find('h2.entry-title a').text().trim();
-        const url = $(el).find('h2.entry-title a').attr('href');
-        const image = $(el).find('img').attr('src') || null;
+    const results = [];
 
-        if (title && url) results.push({ title, url, image });
-      });
+    $('article.post').each((i, el) => {
+      const $el = $(el);
+      const title = $el.find('h2.entry-title a').text().trim();
+      const url = $el.find('h2.entry-title a').attr('href');
+      const img = $el.find('img').attr('src');
+      const yearMatch = title.match(/\d{4}/);
+      const year = yearMatch ? yearMatch[0] : '';
 
-      res.json({ query: q, count: results.length, results });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+      if (title && url) {
+        results.push({ title, url, img, year });
+      }
+    });
+
+    res.json({
+      query,
+      count: results.length,
+      results
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// Real download links
+// Download links endpoint
 app.get('/download-links', async (req, res) => {
-    try {
-      const movieUrl = req.query.url;
-      if (!movieUrl) return res.status(400).json({ error: 'Provide ?url=movie_url' });
+  try {
+    const movieUrl = req.query.url;
+    if (!movieUrl) return res.status(400).json({ error: 'Missing movie URL ?url=' });
 
-      const { data } = await axios.get(movieUrl, { headers });
-      const $ = cheerio.load(data);
+    const { data } = await axios.get(movieUrl, { headers });
+    const $ = cheerio.load(data);
 
-      const title = $('h1.entry-title').text().trim() || 'Unknown';
+    const title = $('h1.entry-title').text().trim() || 'Unknown';
+    const downloadOptions = [];
 
-      const downloadOptions = [];
-      $('.box_links .sbox').each((_, el) => {
-        const serverId = $(el).attr('id');
-        const serverTitle = $(el).prev('.linktabs').find(`a[href="#${serverId}"]`).text().trim();
+    $('.box_links .sbox').each((i, el) => {
+      const serverId = $(el).attr('id');
+      const serverTitle = $(el).prev('.linktabs').find(`a[href="#${serverId}"]`).text().trim() || serverId;
 
-        const links = [];
-        $(el).find('tbody tr').each((i, row) => {
-          const quality = $(row).find('.quality').text().trim();
-          const size = $(row).find('td').eq(2).text().trim();
-          const url = $(row).find('a').attr('href');
+      const links = [];
+      $(el).find('tbody tr').each((i, row) => {
+        const quality = $(row).find('.quality').text().trim() || 'Unknown';
+        const size = $(row).find('td').eq(2).text().trim() || 'Unknown';
+        const url = $(row).find('a').attr('href');
+        const hostImg = $(row).find('img').attr('src') || '';
+        const hostName = hostImg.split('/').pop().replace('.jpg','').replace('.png','') || 'Unknown';
 
-          // pixeldrain direct create
-          let direct = url;
-          if (url && url.includes('pixeldrain.com')) {
+        if (url) {
+          let directUrl = url;
+          if (hostName.toLowerCase().includes('pixeldrain')) {
             const id = url.split('/').pop();
-            direct = `https://pixeldrain.com/api/file/${id}`;
+            directUrl = `https://pixeldrain.com/api/file/${id}`;
           }
-
-          links.push({ quality, size, url, direct });
-        });
-
-        downloadOptions.push({ server: serverTitle || serverId, links });
+          links.push({ quality, size, url, host: hostName, directUrl });
+        }
       });
 
-      res.json({ success: true, title, downloadOptions, url: movieUrl });
-    } catch (err) {
-      res.status(500).json({ error: err.message });
-    }
+      if (links.length) downloadOptions.push({ server: serverId, serverTitle, links });
+    });
+
+    res.json({ success: true, title, downloadOptions });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
-app.listen(PORT, () => console.log(`API running on ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
