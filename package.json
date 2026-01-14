@@ -1,34 +1,18 @@
 {
-  "name": "cinesubz-api",
-  "version": "1.2.0",
-  "description": "CineSubz Movie Downloader API by Mr Senal",
-  "main": "index.js",
+  "name": "slanime-scraper",
+  "version": "1.0.0",
+  "description": "SlAnimeClub scraper API for TV shows and movies",
+  "main": "slanime.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "keywords": ["cinesubz", "movie", "download", "api"],
-  "author": "Mr Senal",
-  "license": "MIT",
-  "dependencies": {
-    "axios": "^1.6.2",
-    "cheerio": "^1.0.0-rc.12",
-    "cors": "^2.8.5",
-    "puppeteer":"^20.9.0",
-    "express": "^4.18.2"
-  },
-  "devDependencies": {
-    "nodemon": "^3.0.2"
+    "start": "node api/slanime.js",
+    "vercel-build": "echo 'Building for Vercel'"
   },
   "engines": {
-    "node": ">=18.x"
+    "node": "18.x"
   },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/Sayurami/cine.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Sayurami/cine/issues"
-  },
-  "homepage": "https://github.com/Sayurami/cine#readme"
+  "dependencies": {
+    "axios": "^1.6.2",
+    "cheerio": "^1.0.0-rc.12"
+  }
 }
